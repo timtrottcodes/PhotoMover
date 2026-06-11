@@ -46,6 +46,7 @@
             this.rbCopy = new System.Windows.Forms.RadioButton();
             this.rbMove = new System.Windows.Forms.RadioButton();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
+            this.backgroundWorkerMove = new System.ComponentModel.BackgroundWorker();
             this.resultLabel = new System.Windows.Forms.Label();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabResults = new System.Windows.Forms.TabPage();
@@ -340,6 +341,7 @@
         private System.Windows.Forms.RadioButton rbCopy;
         private System.Windows.Forms.RadioButton rbMove;
         private System.ComponentModel.BackgroundWorker backgroundWorker1;
+        private System.ComponentModel.BackgroundWorker backgroundWorkerMove;
         private System.Windows.Forms.Label resultLabel;
         private System.Windows.Forms.CheckBox chkTouch;
         private System.Windows.Forms.CheckBox chk_DontMove;

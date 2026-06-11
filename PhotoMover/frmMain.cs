@@ -19,6 +19,7 @@ namespace PhotoMover
     {
         const int propertyTagExifDTOrig_ = 0x9003; //36867;
         List<ItemToMove> items = new List<ItemToMove>();
+        List<string> errorMessages = new List<string>(); // Thread-safe error collection
 
         public frmMain()
         {
@@ -32,9 +33,16 @@ namespace PhotoMover
 
         private void InitializeBackgroundWorker()
         {
-            backgroundWorker1.DoWork += new DoWorkEventHandler(backgroundWorker1_DoWork);
-            backgroundWorker1.RunWorkerCompleted += new RunWorkerCompletedEventHandler(backgroundWorker1_RunWorkerCompleted);
-            backgroundWorker1.ProgressChanged += new ProgressChangedEventHandler(backgroundWorker1_ProgressChanged);
+            backgroundWorker1.DoWork += new DoWorkEventHandler(backgroundWorker1_DoWork!);
+            backgroundWorker1.RunWorkerCompleted += new RunWorkerCompletedEventHandler(backgroundWorker1_RunWorkerCompleted!);
+            backgroundWorker1.ProgressChanged += new ProgressChangedEventHandler(backgroundWorker1_ProgressChanged!);
+
+            // Initialize move background worker
+            backgroundWorkerMove.WorkerReportsProgress = true;
+            backgroundWorkerMove.WorkerSupportsCancellation = true;
+            backgroundWorkerMove.DoWork += new DoWorkEventHandler(backgroundWorkerMove_DoWork!);
+            backgroundWorkerMove.RunWorkerCompleted += new RunWorkerCompletedEventHandler(backgroundWorkerMove_RunWorkerCompleted!);
+            backgroundWorkerMove.ProgressChanged += new ProgressChangedEventHandler(backgroundWorkerMove_ProgressChanged!);
         }
 
         private void btnBrowseSource_Click(object sender, EventArgs e)
@@ -57,6 +65,34 @@ namespace PhotoMover
         {
             if (backgroundWorker1.IsBusy != true)
             {
+                // Issue #5: Validate source folder exists
+                if (string.IsNullOrWhiteSpace(txtSourceFolder.Text))
+                {
+                    MessageBox.Show("Please select a source folder.", "Validation Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (!System.IO.Directory.Exists(txtSourceFolder.Text))
+                {
+                    MessageBox.Show("Source folder does not exist.", "Validation Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Issue #6: Validate date format
+                if (!IsValidDateFormat(txtDateFormat.Text))
+                {
+                    MessageBox.Show("Invalid date format. Please use a valid .NET date format string.\n\n" +
+                        "Examples:\n" +
+                        "  yyyy-MM-dd\n" +
+                        "  yyyy\\\\MM\\\\dd\n" +
+                        "  yyyy-MM\n" +
+                        "  yyyyMMdd",
+                        "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 if (string.IsNullOrEmpty(txtDestinationFolder.Text))
                 {
                     txtDestinationFolder.Text = txtSourceFolder.Text;
@@ -66,6 +102,9 @@ namespace PhotoMover
                 gvResults.DataSource = null;
                 tabControl1.SelectedIndex = 0;
                 tabControl1.TabPages[1].Text = "Errors (0)";
+                lstErrors.Items.Clear();
+                errorMessages.Clear();
+                btnMoveFiles.Enabled = false; // Disable until preview completes
                 backgroundWorker1.RunWorkerAsync();
             }
             else if (backgroundWorker1.WorkerSupportsCancellation == true)
@@ -74,13 +113,49 @@ namespace PhotoMover
             }
         }
 
-        private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
+        // Issue #6: Validate date format string
+        private bool IsValidDateFormat(string format)
         {
-            BackgroundWorker worker = sender as BackgroundWorker;
+            if (string.IsNullOrWhiteSpace(format))
+                return false;
+
+            try
+            {
+                // Test the format with a known date
+                DateTime testDate = new DateTime(2020, 1, 15);
+                string result = testDate.ToString(format);
+
+                // Check for invalid path characters
+                char[] invalidChars = Path.GetInvalidFileNameChars();
+                // Allow backslash for folder separators
+                invalidChars = invalidChars.Where(c => c != '\\').ToArray();
+
+                if (result.IndexOfAny(invalidChars) >= 0)
+                    return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void backgroundWorker1_DoWork(object? sender, DoWorkEventArgs e)
+        {
+            BackgroundWorker? worker = sender as BackgroundWorker;
+            if (worker == null) return;
             string[] files = System.IO.Directory.GetFiles(txtSourceFolder.Text);
             int counter = 0;
             int total = files.Count();
             items = new List<ItemToMove>();
+
+            // Issue #7: Handle empty folder (division by zero)
+            if (total == 0)
+            {
+                worker.ReportProgress(100);
+                return;
+            }
 
             foreach (string file in files)
             {
@@ -91,6 +166,7 @@ namespace PhotoMover
                 }
                 else
                 {
+                    // Issue #1 & #4: GetDateTaken now handles errors internally and adds to errorMessages list
                     DateTime? dateTaken = GetDateTaken(file);
 
                     if (dateTaken.HasValue)
@@ -107,26 +183,52 @@ namespace PhotoMover
                 }
 
                 counter++;
-                var percent = Decimal.Divide(counter,total) * 100;
+                var percent = Decimal.Divide(counter, total) * 100;
                 worker.ReportProgress(Convert.ToInt32(percent));
             }
         }
 
-        private void backgroundWorker1_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        private void backgroundWorker1_ProgressChanged(object? sender, ProgressChangedEventArgs e)
         {
             resultLabel.Text = (e.ProgressPercentage.ToString() + "%");
-            tabControl1.TabPages[1].Text = string.Format("Errors {0}", lstErrors.Items.Count);
+
+            // Issue #1: Update errors on UI thread
+            if (errorMessages.Count > lstErrors.Items.Count)
+            {
+                // Add new error messages to the UI
+                for (int i = lstErrors.Items.Count; i < errorMessages.Count; i++)
+                {
+                    lstErrors.Items.Add(errorMessages[i]);
+                }
+            }
+
+            tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
         }
 
-        private void backgroundWorker1_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        private void backgroundWorker1_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
         {
             resultLabel.Text = "Complete";
+
+            // Issue #1: Final update of error messages
+            if (errorMessages.Count > lstErrors.Items.Count)
+            {
+                for (int i = lstErrors.Items.Count; i < errorMessages.Count; i++)
+                {
+                    lstErrors.Items.Add(errorMessages[i]);
+                }
+            }
+            tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
 
             if (items.Count > 0)
             {
                 gvResults.DataSource = items;
                 gvResults.AutoResizeColumns();
                 btnMoveFiles.Enabled = true;
+            }
+            else
+            {
+                MessageBox.Show("No files with valid date metadata found.", "Preview Complete",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -135,41 +237,61 @@ namespace PhotoMover
             string dateTakenText = string.Empty;
             string ext = Path.GetExtension(filename).ToLower();
 
-            if ((ext == ".jpg") || (ext == ".jpeg"))
+            try
             {
-                using (Image photo = Image.FromFile(filename))
+                if ((ext == ".jpg") || (ext == ".jpeg"))
                 {
+                    // Issue #4: Properly dispose Image to prevent file locking
+                    Image? photo = null;
                     try
                     {
-                        PropertyItem pi = photo.GetPropertyItem(propertyTagExifDTOrig_);
-                        ASCIIEncoding enc = new ASCIIEncoding();
-                        dateTakenText = enc.GetString(pi.Value, 0, pi.Len - 1);
+                        photo = Image.FromFile(filename);
+                        PropertyItem? pi = photo.GetPropertyItem(propertyTagExifDTOrig_);
+                        if (pi != null && pi.Value != null)
+                        {
+                            ASCIIEncoding enc = new ASCIIEncoding();
+                            dateTakenText = enc.GetString(pi.Value, 0, pi.Len - 1);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        lstErrors.Items.Add(string.Format("{0} ({1})", ex.Message, filename));
+                        // Issue #1: Add to thread-safe collection instead of directly to UI
+                        errorMessages.Add(string.Format("{0} ({1})", ex.Message, Path.GetFileName(filename)));
+                    }
+                    finally
+                    {
+                        // Ensure image is disposed even if exception occurs
+                        if (photo != null)
+                        {
+                            photo.Dispose();
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(dateTakenText))
+                    {
+                        DateTime dateTaken;
+                        if (DateTime.TryParseExact(dateTakenText, "yyyy:MM:dd HH:mm:ss", CultureInfo.CurrentCulture, DateTimeStyles.None, out dateTaken))
+                        {
+                            return dateTaken;
+                        }
                     }
                 }
-
-                if (!string.IsNullOrEmpty(dateTakenText))
+                else if (ext == ".cr2")
                 {
-                    DateTime dateTaken;
-                    if (DateTime.TryParseExact(dateTakenText, "yyyy:MM:dd HH:mm:ss", CultureInfo.CurrentCulture, DateTimeStyles.None, out dateTaken))
-                    {
-                        return dateTaken;
-                    }
+                    var directories = ImageMetadataReader.ReadMetadata(filename);
+                    var directory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+
+                    if (directory == null)
+                        return null;
+
+                    if (directory.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dateTime))
+                        return dateTime;
                 }
             }
-            else if (ext == ".cr2")
+            catch (Exception ex)
             {
-                var directories = ImageMetadataReader.ReadMetadata(filename);
-                var directory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-
-                if (directory == null)
-                    return null;
-
-                if (directory.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dateTime))
-                    return dateTime;
+                // Issue #1: Thread-safe error logging
+                errorMessages.Add(string.Format("Error reading {0}: {1}", Path.GetFileName(filename), ex.Message));
             }
 
             return null;
@@ -177,37 +299,210 @@ namespace PhotoMover
 
         private void btnMoveFiles_Click(object sender, EventArgs e)
         {
-            foreach (DataGridViewRow row in gvResults.Rows)
+            // Issue #2: Move file operations to background worker
+            if (backgroundWorkerMove.IsBusy)
             {
-                string source = row.Cells[0].Value.ToString();
-                string destination = row.Cells[3].Value.ToString();
-                string date = row.Cells[2].Value.ToString();
-                string datetime = row.Cells[4].Value.ToString();
-
-                string folder = Path.GetDirectoryName(destination);
-
-                if (!System.IO.Directory.Exists(folder))
-                    System.IO.Directory.CreateDirectory(folder);
-
-                if (!chk_DontMove.Checked)
-                {
-                    if (rbMove.Checked)
-                    {
-                        if (!File.Exists(destination))
-                            File.Move(source, destination);
-                    }
-                    else if (rbCopy.Checked)
-                    {
-                        if (!File.Exists(destination))
-                            File.Copy(source, destination);
-                    }
-                }
-
-                if (chkTouch.Checked)
-                {
-                    File.SetCreationTime(destination, DateTime.Parse(datetime));
-                }
+                MessageBox.Show("A move/copy operation is already in progress.", "Busy",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
+
+            // Confirm the operation
+            string operation = rbMove.Checked ? "move" : "copy";
+            DialogResult result = MessageBox.Show(
+                $"Are you sure you want to {operation} {items.Count} file(s)?",
+                $"Confirm {operation}",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                btnMoveFiles.Enabled = false;
+                btnPreview.Enabled = false;
+                resultLabel.Text = "Processing...";
+                errorMessages.Clear();
+                backgroundWorkerMove.RunWorkerAsync();
+            }
+        }
+
+        // Issue #2, #3, #8, #9: Background worker for move/copy operations
+        private void backgroundWorkerMove_DoWork(object? sender, DoWorkEventArgs e)
+        {
+            BackgroundWorker? worker = sender as BackgroundWorker;
+            if (worker == null) return;
+            int counter = 0;
+            int total = items.Count;
+            int successCount = 0;
+            int skipCount = 0;
+            int errorCount = 0;
+
+            if (total == 0)
+            {
+                worker.ReportProgress(100);
+                return;
+            }
+
+            bool shouldMove = false;
+            bool shouldTouch = false;
+            bool dontMove = false;
+
+            // Get UI settings on UI thread (via Invoke)
+            this.Invoke((MethodInvoker)delegate
+            {
+                shouldMove = rbMove.Checked;
+                shouldTouch = chkTouch.Checked;
+                dontMove = chk_DontMove.Checked;
+            });
+
+            foreach (ItemToMove item in items)
+            {
+                if (worker.CancellationPending)
+                {
+                    e.Cancel = true;
+                    break;
+                }
+
+                try
+                {
+                    // Issue #9: Safe access to item properties (null check done by foreach)
+                    string source = item.sourceFilename;
+                    string destination = item.destinationFilename;
+                    string datetime = item.fullDate.ToString();
+
+                    string? folder = Path.GetDirectoryName(destination);
+
+                    // Create destination folder if needed
+                    if (!string.IsNullOrEmpty(folder) && !System.IO.Directory.Exists(folder))
+                    {
+                        System.IO.Directory.CreateDirectory(folder);
+                    }
+
+                    bool fileWasProcessed = false;
+
+                    // Issue #3: Track whether file was actually moved/copied
+                    if (!dontMove)
+                    {
+                        if (File.Exists(destination))
+                        {
+                            skipCount++;
+                            errorMessages.Add(string.Format("Skipped (already exists): {0}", Path.GetFileName(destination)));
+                        }
+                        else
+                        {
+                            if (shouldMove)
+                            {
+                                File.Move(source, destination);
+                                fileWasProcessed = true;
+                                successCount++;
+                            }
+                            else // Copy
+                            {
+                                File.Copy(source, destination);
+                                fileWasProcessed = true;
+                                successCount++;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Preview mode - just check if destination would exist
+                        fileWasProcessed = File.Exists(destination);
+                    }
+
+                    // Issue #3: Only touch files that were actually moved/copied or exist
+                    if (shouldTouch && fileWasProcessed && File.Exists(destination))
+                    {
+                        File.SetCreationTime(destination, item.fullDate);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Issue #8: Proper error handling for each file
+                    errorCount++;
+                    errorMessages.Add(string.Format("Error processing {0}: {1}",
+                        Path.GetFileName(item.sourceFilename), ex.Message));
+                }
+
+                counter++;
+                int percent = (int)((counter / (double)total) * 100);
+                worker.ReportProgress(percent, new MoveProgress
+                {
+                    Processed = counter,
+                    Total = total,
+                    Success = successCount,
+                    Skipped = skipCount,
+                    Errors = errorCount
+                });
+            }
+
+            // Store final counts in result
+            e.Result = new MoveProgress
+            {
+                Processed = counter,
+                Total = total,
+                Success = successCount,
+                Skipped = skipCount,
+                Errors = errorCount
+            };
+        }
+
+        private void backgroundWorkerMove_ProgressChanged(object? sender, ProgressChangedEventArgs e)
+        {
+            MoveProgress? progress = e.UserState as MoveProgress;
+            if (progress != null)
+            {
+                resultLabel.Text = string.Format("Processing: {0}/{1} (Success: {2}, Skipped: {3}, Errors: {4})",
+                    progress.Processed, progress.Total, progress.Success, progress.Skipped, progress.Errors);
+            }
+
+            // Update error list
+            if (errorMessages.Count > lstErrors.Items.Count)
+            {
+                for (int i = lstErrors.Items.Count; i < errorMessages.Count; i++)
+                {
+                    lstErrors.Items.Add(errorMessages[i]);
+                }
+                tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
+            }
+        }
+
+        private void backgroundWorkerMove_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
+        {
+            btnPreview.Enabled = true;
+
+            MoveProgress? finalProgress = e.Result as MoveProgress;
+            if (finalProgress != null)
+            {
+                resultLabel.Text = string.Format("Complete: {0} succeeded, {1} skipped, {2} errors",
+                    finalProgress.Success, finalProgress.Skipped, finalProgress.Errors);
+
+                string operation = rbMove.Checked ? "moved" : "copied";
+                MessageBox.Show(
+                    string.Format("Operation complete!\n\n" +
+                        "Successfully {0}: {1}\n" +
+                        "Skipped: {2}\n" +
+                        "Errors: {3}",
+                        operation, finalProgress.Success, finalProgress.Skipped, finalProgress.Errors),
+                    "Operation Complete",
+                    MessageBoxButtons.OK,
+                    finalProgress.Errors > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            }
+            else
+            {
+                resultLabel.Text = "Operation cancelled or failed";
+            }
+
+            // Update final error list
+            if (errorMessages.Count > lstErrors.Items.Count)
+            {
+                for (int i = lstErrors.Items.Count; i < errorMessages.Count; i++)
+                {
+                    lstErrors.Items.Add(errorMessages[i]);
+                }
+                tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
+            }
+
+            // Don't re-enable move button - user should preview again after moving
         }
 
         private void rbCopy_CheckedChanged(object sender, EventArgs e)
@@ -227,17 +522,27 @@ namespace PhotoMover
     public class ItemToMove
     {
         [DisplayName("Source")]
-        public string sourceFilename { get; set; }
+        public string sourceFilename { get; set; } = string.Empty;
 
         [DisplayName("Format")]
-        public string format { get; set; }
+        public string format { get; set; } = string.Empty;
 
         [DisplayName("Date Taken")]
-        public string dataTaken { get; set; }
+        public string dataTaken { get; set; } = string.Empty;
 
         [DisplayName("Destination")]
-        public string destinationFilename { get; set; }
+        public string destinationFilename { get; set; } = string.Empty;
 
         public DateTime fullDate { get; set; }
+    }
+
+    // Helper class for move operation progress tracking
+    public class MoveProgress
+    {
+        public int Processed { get; set; }
+        public int Total { get; set; }
+        public int Success { get; set; }
+        public int Skipped { get; set; }
+        public int Errors { get; set; }
     }
 }
