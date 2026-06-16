@@ -28,7 +28,142 @@ namespace PhotoMover
 
             backgroundWorker1.WorkerReportsProgress = true;
             backgroundWorker1.WorkerSupportsCancellation = true;
-            resultLabel.Text = string.Empty;
+            toolStripStatusLabel.Text = "Ready";
+            toolStripProgressBar.Visible = false;
+
+            // Apply theme after all controls are initialized
+            ApplyTheme();
+        }
+
+        private void ApplyTheme()
+        {
+            AppTheme theme = ThemeManager.GetCurrentTheme();
+
+            // Form
+            this.BackColor = theme.FormBackground;
+
+            // Header Panel
+            panelHeader.BackColor = theme.HeaderBackground;
+            lblAppTitle.ForeColor = theme.HeaderText;
+            lblAppDescription.ForeColor = theme.HeaderSubtext;
+
+            // Group Boxes
+            ApplyGroupBoxTheme(grpFolders, theme);
+            ApplyGroupBoxTheme(grpOptions, theme);
+            ApplyGroupBoxTheme(grpActions, theme);
+
+            // Status Bar
+            statusStrip1.BackColor = theme.StatusBarBack;
+            toolStripStatusLabel.ForeColor = theme.StatusBarText;
+
+            // Tab Control
+            tabControl1.BackColor = theme.FormBackground;
+            ApplyTabTheme(tabResults, theme);
+            ApplyTabTheme(tabErrors, theme);
+
+            // Data Grid
+            ApplyDataGridTheme(gvResults, theme);
+
+            // Error List
+            lstErrors.BackColor = theme.ControlBackground;
+            lstErrors.ForeColor = theme.ControlText;
+        }
+
+        private void ApplyGroupBoxTheme(GroupBox group, AppTheme theme)
+        {
+            group.BackColor = theme.FormBackground;
+            group.ForeColor = theme.GroupBoxText;
+
+            foreach (Control ctrl in group.Controls)
+            {
+                if (ctrl is TextBox textBox)
+                {
+                    textBox.BackColor = theme.ControlBackground;
+                    textBox.ForeColor = theme.ControlText;
+                    textBox.BorderStyle = BorderStyle.FixedSingle;
+                }
+                else if (ctrl is Button btn)
+                {
+                    ApplyButtonTheme(btn, theme);
+                }
+                else if (ctrl is Label label)
+                {
+                    label.BackColor = Color.Transparent;
+                    // Check if it's a help label by font size
+                    if (label.Font.Size <= 8.5f)
+                    {
+                        label.ForeColor = theme.HelpText;
+                    }
+                    else
+                    {
+                        label.ForeColor = theme.ControlText;
+                    }
+                }
+                else if (ctrl is CheckBox || ctrl is RadioButton)
+                {
+                    ctrl.BackColor = Color.Transparent;
+                    ctrl.ForeColor = theme.ControlText;
+                }
+            }
+        }
+
+        private void ApplyButtonTheme(Button btn, AppTheme theme)
+        {
+            // Determine button type by name or text
+            if (btn == btnPreview)
+            {
+                btn.BackColor = theme.ButtonPrimary;
+                btn.ForeColor = theme.ButtonPrimaryText;
+            }
+            else if (btn == btnMoveFiles)
+            {
+                btn.BackColor = theme.ButtonSecondary;
+                btn.ForeColor = theme.ButtonSecondaryText;
+            }
+            else if (btn == btnClear)
+            {
+                btn.BackColor = theme.ButtonDefault;
+                btn.ForeColor = theme.ButtonDefaultText;
+            }
+            else if (btn == btnBrowseSource || btn == btnBrowseDestination)
+            {
+                btn.BackColor = theme.ButtonDefault;
+                btn.ForeColor = theme.ButtonDefaultText;
+            }
+
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderColor = theme.BorderColor;
+            btn.FlatAppearance.BorderSize = 1;
+        }
+
+        private void ApplyTabTheme(TabPage tab, AppTheme theme)
+        {
+            tab.BackColor = theme.ControlBackground;
+            tab.ForeColor = theme.ControlText;
+        }
+
+        private void ApplyDataGridTheme(DataGridView grid, AppTheme theme)
+        {
+            grid.BackgroundColor = theme.GridBackground;
+            grid.GridColor = theme.BorderColor;
+            grid.ForeColor = theme.ControlText;
+
+            grid.EnableHeadersVisualStyles = false;
+            grid.ColumnHeadersDefaultCellStyle.BackColor = theme.GridHeaderBack;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = theme.GridHeaderText;
+            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = theme.GridHeaderBack;
+            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = theme.GridHeaderText;
+
+            grid.DefaultCellStyle.BackColor = theme.GridBackground;
+            grid.DefaultCellStyle.ForeColor = theme.ControlText;
+            grid.DefaultCellStyle.SelectionBackColor = theme.ButtonPrimary;
+            grid.DefaultCellStyle.SelectionForeColor = Color.White;
+
+            grid.AlternatingRowsDefaultCellStyle.BackColor = theme.GridAlternateRow;
+            grid.AlternatingRowsDefaultCellStyle.ForeColor = theme.ControlText;
+
+            grid.RowHeadersDefaultCellStyle.BackColor = theme.GridHeaderBack;
+            grid.RowHeadersDefaultCellStyle.ForeColor = theme.GridHeaderText;
         }
 
         private void InitializeBackgroundWorker()
@@ -98,10 +233,12 @@ namespace PhotoMover
                     txtDestinationFolder.Text = txtSourceFolder.Text;
                 }
 
-                resultLabel.Text = string.Empty;
+                toolStripStatusLabel.Text = "Scanning photos...";
+                toolStripProgressBar.Value = 0;
+                toolStripProgressBar.Visible = true;
                 gvResults.DataSource = null;
                 tabControl1.SelectedIndex = 0;
-                tabControl1.TabPages[1].Text = "Errors (0)";
+                tabControl1.TabPages[1].Text = "⚠️ Errors (0)";
                 lstErrors.Items.Clear();
                 errorMessages.Clear();
                 btnMoveFiles.Enabled = false; // Disable until preview completes
@@ -190,7 +327,8 @@ namespace PhotoMover
 
         private void backgroundWorker1_ProgressChanged(object? sender, ProgressChangedEventArgs e)
         {
-            resultLabel.Text = (e.ProgressPercentage.ToString() + "%");
+            toolStripProgressBar.Value = e.ProgressPercentage;
+            toolStripStatusLabel.Text = string.Format("Scanning photos... {0}%", e.ProgressPercentage);
 
             // Issue #1: Update errors on UI thread
             if (errorMessages.Count > lstErrors.Items.Count)
@@ -202,12 +340,12 @@ namespace PhotoMover
                 }
             }
 
-            tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
+            tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
         }
 
         private void backgroundWorker1_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
         {
-            resultLabel.Text = "Complete";
+            toolStripProgressBar.Visible = false;
 
             // Issue #1: Final update of error messages
             if (errorMessages.Count > lstErrors.Items.Count)
@@ -217,16 +355,18 @@ namespace PhotoMover
                     lstErrors.Items.Add(errorMessages[i]);
                 }
             }
-            tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
+            tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
 
             if (items.Count > 0)
             {
                 gvResults.DataSource = items;
                 gvResults.AutoResizeColumns();
                 btnMoveFiles.Enabled = true;
+                toolStripStatusLabel.Text = string.Format("Preview complete: {0} file(s) found", items.Count);
             }
             else
             {
+                toolStripStatusLabel.Text = "No files with valid date metadata found";
                 MessageBox.Show("No files with valid date metadata found.", "Preview Complete",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -319,7 +459,9 @@ namespace PhotoMover
             {
                 btnMoveFiles.Enabled = false;
                 btnPreview.Enabled = false;
-                resultLabel.Text = "Processing...";
+                toolStripStatusLabel.Text = "Processing files...";
+                toolStripProgressBar.Value = 0;
+                toolStripProgressBar.Visible = true;
                 errorMessages.Clear();
                 backgroundWorkerMove.RunWorkerAsync();
             }
@@ -451,7 +593,8 @@ namespace PhotoMover
             MoveProgress? progress = e.UserState as MoveProgress;
             if (progress != null)
             {
-                resultLabel.Text = string.Format("Processing: {0}/{1} (Success: {2}, Skipped: {3}, Errors: {4})",
+                toolStripProgressBar.Value = Math.Min((progress.Processed * 100) / progress.Total, 100);
+                toolStripStatusLabel.Text = string.Format("Processing: {0}/{1} (Success: {2}, Skipped: {3}, Errors: {4})",
                     progress.Processed, progress.Total, progress.Success, progress.Skipped, progress.Errors);
             }
 
@@ -462,18 +605,19 @@ namespace PhotoMover
                 {
                     lstErrors.Items.Add(errorMessages[i]);
                 }
-                tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
+                tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
             }
         }
 
         private void backgroundWorkerMove_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
         {
             btnPreview.Enabled = true;
+            toolStripProgressBar.Visible = false;
 
             MoveProgress? finalProgress = e.Result as MoveProgress;
             if (finalProgress != null)
             {
-                resultLabel.Text = string.Format("Complete: {0} succeeded, {1} skipped, {2} errors",
+                toolStripStatusLabel.Text = string.Format("Complete: {0} succeeded, {1} skipped, {2} errors",
                     finalProgress.Success, finalProgress.Skipped, finalProgress.Errors);
 
                 string operation = rbMove.Checked ? "moved" : "copied";
@@ -489,7 +633,7 @@ namespace PhotoMover
             }
             else
             {
-                resultLabel.Text = "Operation cancelled or failed";
+                toolStripStatusLabel.Text = "Operation cancelled or failed";
             }
 
             // Update final error list
@@ -499,7 +643,7 @@ namespace PhotoMover
                 {
                     lstErrors.Items.Add(errorMessages[i]);
                 }
-                tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
+                tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
             }
 
             // Don't re-enable move button - user should preview again after moving
@@ -508,14 +652,28 @@ namespace PhotoMover
         private void rbCopy_CheckedChanged(object sender, EventArgs e)
         {
             if (rbCopy.Checked)
-                btnMoveFiles.Text = "Copy";
+                btnMoveFiles.Text = "✓ Copy Files";
             else if (rbMove.Checked)
-                btnMoveFiles.Text = "Move";
+                btnMoveFiles.Text = "✓ Move Files";
         }
 
         private void TxtSourceFolder_TextChanged(object sender, EventArgs e)
         {
             btnPreview.Enabled = !string.IsNullOrEmpty(txtSourceFolder.Text);
+        }
+
+        private void btnClear_Click(object sender, EventArgs e)
+        {
+            gvResults.DataSource = null;
+            lstErrors.Items.Clear();
+            errorMessages.Clear();
+            items.Clear();
+            btnMoveFiles.Enabled = false;
+            tabControl1.TabPages[1].Text = "⚠️ Errors (0)";
+            tabControl1.SelectedIndex = 0;
+            toolStripStatusLabel.Text = "Ready";
+            toolStripProgressBar.Value = 0;
+            toolStripProgressBar.Visible = false;
         }
     }
 
