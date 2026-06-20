@@ -10,7 +10,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace PhotoMover
@@ -35,6 +34,17 @@ namespace PhotoMover
             ApplyTheme();
         }
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+
+            // Apply dark title bar if in dark mode
+            if (ThemeManager.CurrentMode == ThemeMode.Dark)
+            {
+                DwmHelper.UseImmersiveDarkMode(this.Handle, true);
+            }
+        }
+
         private void ApplyTheme()
         {
             AppTheme theme = ThemeManager.GetCurrentTheme();
@@ -57,7 +67,7 @@ namespace PhotoMover
             toolStripStatusLabel.ForeColor = theme.StatusBarText;
 
             // Tab Control
-            tabControl1.BackColor = theme.FormBackground;
+            tabControl1.SetTheme(theme);
             ApplyTabTheme(tabResults, theme);
             ApplyTabTheme(tabErrors, theme);
 
@@ -73,6 +83,10 @@ namespace PhotoMover
         {
             group.BackColor = theme.FormBackground;
             group.ForeColor = theme.GroupBoxText;
+
+            // Enable custom painting for group boxes
+            group.Paint -= GroupBox_Paint; // Remove if already added
+            group.Paint += GroupBox_Paint;
 
             foreach (Control ctrl in group.Controls)
             {
@@ -104,6 +118,41 @@ namespace PhotoMover
                     ctrl.BackColor = Color.Transparent;
                     ctrl.ForeColor = theme.ControlText;
                 }
+            }
+        }
+
+        private void GroupBox_Paint(object? sender, PaintEventArgs e)
+        {
+            GroupBox box = (GroupBox)sender!;
+            AppTheme theme = ThemeManager.GetCurrentTheme();
+
+            Graphics g = e.Graphics;
+            g.Clear(theme.FormBackground);
+
+            // Measure text
+            SizeF textSize = g.MeasureString(box.Text, box.Font);
+            int textPadding = 8;
+
+            // Draw border
+            int borderY = (int)(textSize.Height / 2);
+            Rectangle borderRect = new Rectangle(0, borderY, box.Width - 1, box.Height - borderY - 1);
+
+            using (Pen borderPen = new Pen(theme.BorderColor, 1))
+            {
+                g.DrawRectangle(borderPen, borderRect);
+            }
+
+            // Draw text background
+            Rectangle textBackRect = new Rectangle(8, 0, (int)textSize.Width + textPadding * 2, (int)textSize.Height);
+            using (SolidBrush backBrush = new SolidBrush(theme.FormBackground))
+            {
+                g.FillRectangle(backBrush, textBackRect);
+            }
+
+            // Draw text
+            using (SolidBrush textBrush = new SolidBrush(theme.GroupBoxText))
+            {
+                g.DrawString(box.Text, box.Font, textBrush, 8 + textPadding, 0);
             }
         }
 
@@ -165,6 +214,8 @@ namespace PhotoMover
             grid.RowHeadersDefaultCellStyle.BackColor = theme.GridHeaderBack;
             grid.RowHeadersDefaultCellStyle.ForeColor = theme.GridHeaderText;
         }
+
+
 
         private void InitializeBackgroundWorker()
         {
@@ -238,7 +289,7 @@ namespace PhotoMover
                 toolStripProgressBar.Visible = true;
                 gvResults.DataSource = null;
                 tabControl1.SelectedIndex = 0;
-                tabControl1.TabPages[1].Text = "⚠️ Errors (0)";
+                tabControl1.TabPages[1].Text = "Errors (0)";
                 lstErrors.Items.Clear();
                 errorMessages.Clear();
                 btnMoveFiles.Enabled = false; // Disable until preview completes
@@ -340,7 +391,7 @@ namespace PhotoMover
                 }
             }
 
-            tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
+            tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
         }
 
         private void backgroundWorker1_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
@@ -355,7 +406,7 @@ namespace PhotoMover
                     lstErrors.Items.Add(errorMessages[i]);
                 }
             }
-            tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
+            tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
 
             if (items.Count > 0)
             {
@@ -605,7 +656,7 @@ namespace PhotoMover
                 {
                     lstErrors.Items.Add(errorMessages[i]);
                 }
-                tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
+                tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
             }
         }
 
@@ -643,7 +694,7 @@ namespace PhotoMover
                 {
                     lstErrors.Items.Add(errorMessages[i]);
                 }
-                tabControl1.TabPages[1].Text = string.Format("⚠️ Errors ({0})", lstErrors.Items.Count);
+                tabControl1.TabPages[1].Text = string.Format("Errors ({0})", lstErrors.Items.Count);
             }
 
             // Don't re-enable move button - user should preview again after moving
@@ -652,9 +703,9 @@ namespace PhotoMover
         private void rbCopy_CheckedChanged(object sender, EventArgs e)
         {
             if (rbCopy.Checked)
-                btnMoveFiles.Text = "✓ Copy Files";
+                btnMoveFiles.Text = "Copy Files";
             else if (rbMove.Checked)
-                btnMoveFiles.Text = "✓ Move Files";
+                btnMoveFiles.Text = "Move Files";
         }
 
         private void TxtSourceFolder_TextChanged(object sender, EventArgs e)
@@ -669,7 +720,7 @@ namespace PhotoMover
             errorMessages.Clear();
             items.Clear();
             btnMoveFiles.Enabled = false;
-            tabControl1.TabPages[1].Text = "⚠️ Errors (0)";
+            tabControl1.TabPages[1].Text = "Errors (0)";
             tabControl1.SelectedIndex = 0;
             toolStripStatusLabel.Text = "Ready";
             toolStripProgressBar.Value = 0;

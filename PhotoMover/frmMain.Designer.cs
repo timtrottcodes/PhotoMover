@@ -49,7 +49,7 @@
             this.rbMove = new System.Windows.Forms.RadioButton();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
             this.backgroundWorkerMove = new System.ComponentModel.BackgroundWorker();
-            this.tabControl1 = new System.Windows.Forms.TabControl();
+            this.tabControl1 = new PhotoMover.ThemedTabControl();
             this.tabResults = new System.Windows.Forms.TabPage();
             this.gvResults = new System.Windows.Forms.DataGridView();
             this.tabErrors = new System.Windows.Forms.TabPage();
@@ -125,7 +125,7 @@
             this.grpFolders.Size = new System.Drawing.Size(540, 185);
             this.grpFolders.TabIndex = 1;
             this.grpFolders.TabStop = false;
-            this.grpFolders.Text = "📁 Folder Selection";
+            this.grpFolders.Text = "Folder Selection";
             //
             // lblSourceFolder
             //
@@ -226,7 +226,7 @@
             this.grpOptions.Size = new System.Drawing.Size(500, 185);
             this.grpOptions.TabIndex = 2;
             this.grpOptions.TabStop = false;
-            this.grpOptions.Text = "⚙️ Options";
+            this.grpOptions.Text = "Options";
             //
             // rbMove
             //
@@ -322,7 +322,7 @@
             this.grpActions.Size = new System.Drawing.Size(1060, 75);
             this.grpActions.TabIndex = 3;
             this.grpActions.TabStop = false;
-            this.grpActions.Text = "🚀 Actions";
+            this.grpActions.Text = "Actions";
             //
             // btnPreview
             //
@@ -333,7 +333,7 @@
             this.btnPreview.Name = "btnPreview";
             this.btnPreview.Size = new System.Drawing.Size(140, 35);
             this.btnPreview.TabIndex = 0;
-            this.btnPreview.Text = "📋 Preview";
+            this.btnPreview.Text = "Preview";
             this.toolTip1.SetToolTip(this.btnPreview, "Scan photos and preview how they will be organized");
             this.btnPreview.UseVisualStyleBackColor = true;
             this.btnPreview.Click += new System.EventHandler(this.btnPreview_Click);
@@ -347,7 +347,7 @@
             this.btnMoveFiles.Name = "btnMoveFiles";
             this.btnMoveFiles.Size = new System.Drawing.Size(140, 35);
             this.btnMoveFiles.TabIndex = 1;
-            this.btnMoveFiles.Text = "✓ Move Files";
+            this.btnMoveFiles.Text = "Move Files";
             this.toolTip1.SetToolTip(this.btnMoveFiles, "Execute the move/copy operation");
             this.btnMoveFiles.UseVisualStyleBackColor = true;
             this.btnMoveFiles.Click += new System.EventHandler(this.btnMoveFiles_Click);
@@ -360,7 +360,7 @@
             this.btnClear.Name = "btnClear";
             this.btnClear.Size = new System.Drawing.Size(120, 35);
             this.btnClear.TabIndex = 2;
-            this.btnClear.Text = "🗑️ Clear Results";
+            this.btnClear.Text = "Clear Results";
             this.toolTip1.SetToolTip(this.btnClear, "Clear the preview results");
             this.btnClear.UseVisualStyleBackColor = true;
             this.btnClear.Click += new System.EventHandler(this.btnClear_Click);
@@ -374,10 +374,12 @@
             this.tabControl1.Controls.Add(this.tabResults);
             this.tabControl1.Controls.Add(this.tabErrors);
             this.tabControl1.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.tabControl1.ItemSize = new System.Drawing.Size(180, 28);
             this.tabControl1.Location = new System.Drawing.Point(20, 390);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
             this.tabControl1.Size = new System.Drawing.Size(1060, 215);
+            this.tabControl1.SizeMode = System.Windows.Forms.TabSizeMode.Fixed;
             this.tabControl1.TabIndex = 4;
             //
             // tabResults
@@ -388,7 +390,7 @@
             this.tabResults.Padding = new System.Windows.Forms.Padding(8);
             this.tabResults.Size = new System.Drawing.Size(1052, 187);
             this.tabResults.TabIndex = 0;
-            this.tabResults.Text = "📊 Preview Results";
+            this.tabResults.Text = "Preview Results";
             this.tabResults.UseVisualStyleBackColor = true;
             //
             // gvResults
@@ -417,7 +419,7 @@
             this.tabErrors.Padding = new System.Windows.Forms.Padding(8);
             this.tabErrors.Size = new System.Drawing.Size(1052, 187);
             this.tabErrors.TabIndex = 1;
-            this.tabErrors.Text = "⚠️ Errors (0)";
+            this.tabErrors.Text = "Errors (0)";
             this.tabErrors.UseVisualStyleBackColor = true;
             //
             // lstErrors
@@ -513,7 +515,7 @@
         private System.ComponentModel.BackgroundWorker backgroundWorkerMove;
         private System.Windows.Forms.CheckBox chkTouch;
         private System.Windows.Forms.CheckBox chk_DontMove;
-        private System.Windows.Forms.TabControl tabControl1;
+        private PhotoMover.ThemedTabControl tabControl1;
         private System.Windows.Forms.TabPage tabResults;
         private System.Windows.Forms.DataGridView gvResults;
         private System.Windows.Forms.TabPage tabErrors;
